@@ -1,0 +1,111 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "adminUsername": { "type": "string" },
+    "adminPassword": { "type": "securestring" },
+    "myvm":{ "type": "string" },
+    "vmsize": { "type": "string" }
+   
+  },
+  "variables": {
+    "vnetID": "[resourceId('Microsoft.Network/virtualNetworks',variables('myVNet'))]", 
+    "subnetRef": "[concat(variables('vnetID'),'/subnets/',variables('mySubnet'))]", 
+    "myPublicIPAddress": "[concat(parameters('myvm'),uniqueString(subscription().subscriptionId))]",
+    "myresourcegroupdns": "[concat(parameters('myvm'),uniqueString(subscription().subscriptionId))]",
+    "mySubnet": "[concat(parameters('myvm'),'subnet')]",
+    "myVNet": "[concat(parameters('myvm'),'vnet')]",
+    "myNic": "[concat(parameters('myvm'),'Nic')]",
+    "myipconfig": "[concat(parameters('myvm'),'ifconfig')]",
+    "myManagedOSDisk": "[concat(parameters('myvm'),'ManagedOSDisk')]"       
+  },
+  "resources": [
+    {
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('myPublicIPAddress')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[variables('myresourcegroupdns')]"
+
+        }
+      }
+    },
+    {
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[variables('myVNet')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "addressSpace": { "addressPrefixes": [ "10.0.0.0/16" ] },
+        "subnets": [
+          {
+            "name": "[variables('mySubnet')]",
+            "properties": { "addressPrefix": "10.0.0.0/24" }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('myNic')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses/',variables('myPublicIPAddress'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/', variables('myVNet'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "[variables('myipconfig')]",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": { "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('myPublicIPAddress'))]" },
+              "subnet": { "id": "[variables('subnetRef')]" }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2016-04-30-preview",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[parameters('myvm')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces/', variables('myNic'))]"
+      ],
+      "properties": {
+        "hardwareProfile": { "vmSize": "[parameters('vmsize')]" },
+        "osProfile": {
+          "computerName": "[parameters('myvm')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "2012-R2-Datacenter",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[variables('myManagedOSDisk')]",
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',variables('myNic'))]"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
