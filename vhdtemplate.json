@@ -1,0 +1,158 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "adminUsername": { "type": "string" },
+    "adminPassword": { "type": "securestring" },
+    "myvm":{ "type": "string" },
+    "vmsize": { "type": "string" },
+    "bootDiagnosticsStorageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "This is the name of the your storage account"
+      }
+    },
+    "bootDiagnosticsStorageAccountResourceGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group of the existing storage account"
+      }
+    },
+      "osDiskVhdUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Uri of the your user image"
+      }
+    }
+   
+  },
+  "variables": {
+    "apiVersion": "2015-05-01-preview",
+    
+    "imageName": "mycustomimage",
+    "vnetID": "[resourceId('Microsoft.Network/virtualNetworks',variables('myVNet'))]", 
+    "subnetRef": "[concat(variables('vnetID'),'/subnets/',variables('mySubnet'))]", 
+    "myPublicIPAddress": "[concat(parameters('myvm'),uniqueString(subscription().subscriptionId))]",
+    "myresourcegroupdns": "[concat(parameters('myvm'),uniqueString(subscription().subscriptionId))]",
+    "mySubnet": "[concat(parameters('myvm'),'subnet')]",
+    "myVNet": "[concat(parameters('myvm'),'vnet')]",
+    "myNic": "[concat(parameters('myvm'),'Nic')]",
+    "myipconfig": "[concat(parameters('myvm'),'ifconfig')]",
+    "myManagedOSDisk": "[concat(parameters('myvm'),'ManagedOSDisk')]"       
+  },
+  "resources": [
+  {
+            "type": "Microsoft.Compute/images",
+            "name": "[variables('imageName')]",
+            "apiVersion": "2016-04-30-preview",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "storageProfile": {
+                    "osDisk": {
+                        "osType": "Windows",
+                        "osState": "Generalized",
+                        "blobUri": "[parameters('osDiskVhdUri')]",
+                        "storageAccountType": "Standard_LRS"
+                        
+                    }
+                }
+            }
+        },
+    {
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('myPublicIPAddress')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[variables('myresourcegroupdns')]"
+
+        }
+      }
+    },
+    {
+      "apiVersion": "2016-03-30",
+     
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[variables('myVNet')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "addressSpace": { "addressPrefixes": [ "10.0.0.0/16" ] },
+        "subnets": [
+          {
+            "name": "[variables('mySubnet')]",
+            "properties": { "addressPrefix": "10.0.0.0/24" }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('myNic')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses/',variables('myPublicIPAddress'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/', variables('myVNet'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "[variables('myipconfig')]",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": { "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('myPublicIPAddress'))]" },
+              "subnet": { "id": "[variables('subnetRef')]" }
+            }
+          }
+        ]
+      }
+    },
+    
+
+
+   
+      
+
+
+{
+            "type": "Microsoft.Compute/virtualMachines",
+            "name": "[parameters('myvm')]",
+            "apiVersion": "2016-04-30-preview",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('vmsize')]"
+                },
+                "osProfile": {
+                    "computerName": "[parameters('myvm')]",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "id": "[resourceId('Microsoft.Compute/images', variables('imageName'))]"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces',variables('myNic'))]",
+                             "enabled": "true"
+                        }
+                    ]
+                },
+                "diagnosticsProfile": {
+                    "bootDiagnostics": {
+                        "storageUri": "[concat(reference(resourceId(parameters('bootDiagnosticsStorageAccountResourceGroupName'), 'Microsoft.Storage/storageAccounts/', parameters('bootDiagnosticsStorageAccountName')), variables('apiVersion')).primaryEndpoints.blob)]"
+                    }
+                }
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Network/networkInterfaces/', variables('myNic'))]"
+            ]
+        }
+
+]
+}
